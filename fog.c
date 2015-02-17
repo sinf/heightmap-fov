@@ -5,35 +5,33 @@
 
 typedef struct {
 	int x, y;
+	int fogged;
 	float z;
 	float z_inc;
 	// sa,sb: direction vectors from light to tile corners
-	// sa,sb are sorted counter clockwise
+	// they're sorted to be counter-clockwise
 	float sa[2];
 	float sb[2];
 	// sc: from light to tile centre
 	float sc[2];
-	float sh[2];
-	int fogged;
 } FogTile;
 
 static void find_corners( float *a, float *b, const float off[2], int sector_id )
 {
-	int q = sector_id & 1;
-	q ^= sector_id >> 1;
-
-	if ( 1 ) {
-		// make sure a,b are counter-clockwise 
-		float *a0 = a;
-		a = b;
-		b = a0;
+	const float w = 1; // values greater other than 1 are incorrect
+	const float corner_off[4][2][2] = {
+		{{-w,0},{0,-w}},
+		{{0,-w},{w,0}},
+		{{0,w},{-w,0}},
+		{{w,0},{0,w}}
+	};
+	int i;
+	for( i=0; i<2; i++ ) {
+		float o = off[i];
+		const float (*c)[2] = corner_off[sector_id];
+		a[i] = o + c[0][i];
+		b[i] = o + c[1][i];
 	}
-
-	a[0] = off[0] + q;
-	a[1] = off[1] + !q;
-
-	b[0] = off[0] + !q;
-	b[1] = off[1] + q;
 }
 
 static void find_shadow( Light *li, FogTile *t, int sector_id )
@@ -57,9 +55,14 @@ static float cross_z( float a[2], float b[2] )
 
 static void test_occlusion( Light *li, FogTile *cur, FogTile *prev )
 {
-	if ( prev->z > li->pos[2] ) {
+	if ( cur->z > li->pos[2] )
+		cur->fogged = 1;
+
+	if ( prev->z >= cur->z ) {
+
 		float a = cross_z( prev->sa, cur->sc );
 		float b = cross_z( cur->sc, prev->sb );
+
 		if ( a >= 0 && b >= 0 ) {
 
 			for( int i=0; i<2; i++ ) {
@@ -69,6 +72,7 @@ static void test_occlusion( Light *li, FogTile *cur, FogTile *prev )
 
 			cur->fogged = 1;
 			cur->z = prev->z;
+			cur->z_inc = prev->z_inc;
 		}
 	}
 }
@@ -88,11 +92,10 @@ static void clear_sector( Light *li, int sector_id,
 	
 	for( x=0; x<MAX_R; x++ ) {
 		FogTile *t = prev_row + x;
+		memset( t, 0, sizeof(*t) );
 		t->x = x0 + x;
 		t->y = y0;
-		t->fogged = 0;
 		t->z = -10000;
-		t->z_inc = 0;
 	}
 
 	for( y=y0; y!=y_end; y+=y_inc ) {
@@ -105,31 +108,41 @@ static void clear_sector( Light *li, int sector_id,
 			float dy = cy - li->pos[1];
 			float d = dx*dx + dy*dy;
 
-			if ( d > rr )
+			if ( d > rr ) {
+				x_end = x;
 				break;
+			}
 
 			FogTile *cur = cur_row + rx;
 
+			cur->fogged = 0;
 			cur->x = x;
 			cur->y = y;
-			cur->fogged = 0;
+
 			cur->z = terrain_z[y][x];
+			cur->z_inc = ( cur->z - li->pos[2] ) / sqrt( d );
+
 			cur->sc[0] = dx;
 			cur->sc[1] = dy;
 
 			find_shadow( li, cur, sector_id );
 
-			if ( y != y0 )
-				test_occlusion( li, cur, prev_row+rx );
-
-			if ( rx > 0 ) {
-				if ( y != y0 )
+			if ( y != y0 ) {
+				if ( rx > 0 )
 					test_occlusion( li, cur, prev_row+rx-1 );
-				if ( 1 )
-					test_occlusion( li, cur, cur_row+rx-1 );
+				test_occlusion( li, cur, prev_row+rx );
 			}
+		}
+
+		for( rx=0, x=x0; x!=x_end; rx++, x+=x_inc ) {
+
+			FogTile *cur = cur_row + rx;
+			
+			if ( rx > 0 )
+				test_occlusion( li, cur, cur_row+rx-1 );
 
 			fog_layer[y][x] = cur->fogged;
+			cur->z += cur->z_inc;
 		}
 
 		FogTile *temp = cur_row;

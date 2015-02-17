@@ -30,9 +30,13 @@ static int process_events( void )
 					case SDLK_ESCAPE:
 						return 0;
 					case SDLK_UP:
+						if ( SDL_GetModState() & KMOD_SHIFT )
+							light.pos[2] += lz2 * 8;
 						light.pos[2] += lz;
 						break;
 					case SDLK_DOWN:
+						if ( SDL_GetModState() & KMOD_SHIFT )
+							light.pos[2] -= lz2 * 8;
 						light.pos[2] -= lz;
 						break;
 					case SDLK_RIGHT:
