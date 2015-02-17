@@ -18,7 +18,7 @@ typedef struct {
 
 static void find_corners( float *a, float *b, const float off[2], int sector_id )
 {
-	const float w = 1; // values greater other than 1 are incorrect
+	const float w = 1.0; // values greater other than 1 are incorrect but fix leaks
 	const float corner_off[4][2][2] = {
 		{{-w,0},{0,-w}},
 		{{0,-w},{w,0}},
@@ -60,8 +60,18 @@ static void test_occlusion( Light *li, FogTile *cur, FogTile *prev )
 
 	if ( prev->z >= cur->z ) {
 
-		float a = cross_z( prev->sa, cur->sc );
-		float b = cross_z( cur->sc, prev->sb );
+		float a, b;
+
+		/*
+		// check if tile centre is inside the shadow cone
+		a = cross_z( prev->sa, cur->sc );
+		b = cross_z( cur->sc, prev->sb );
+		*/
+
+		// check if the shadow cone touches the tile even a little bit
+		// (less light leakage)
+		a = cross_z( prev->sa, cur->sb );
+		b = cross_z( cur->sa, prev->sb );
 
 		if ( a >= 0 && b >= 0 ) {
 
