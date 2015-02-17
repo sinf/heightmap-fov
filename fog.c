@@ -55,8 +55,10 @@ static float cross_z( float a[2], float b[2] )
 
 static void test_occlusion( Light *li, FogTile *cur, FogTile *prev )
 {
-	if ( cur->z > li->pos[2] )
+	if ( cur->z > li->pos[2] ) {
 		cur->fogged = 1;
+		return;
+	}
 
 	if ( prev->z >= cur->z ) {
 
@@ -118,10 +120,12 @@ static void clear_sector( Light *li, int sector_id,
 			float dy = cy - li->pos[1];
 			float d = dx*dx + dy*dy;
 
+			#if 1
 			if ( d > rr ) {
 				x_end = x;
 				break;
 			}
+			#endif
 
 			FogTile *cur = cur_row + rx;
 
