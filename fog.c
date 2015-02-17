@@ -18,7 +18,7 @@ typedef struct {
 
 static void find_corners( float *a, float *b, const float off[2], int sector_id )
 {
-	const float w = 1.0; // values greater other than 1 are incorrect but fix leaks
+	const float w = 1.3; // values greater other than 1 are incorrect but fix leaks
 	const float corner_off[4][2][2] = {
 		{{-w,0},{0,-w}},
 		{{0,-w},{w,0}},
@@ -64,18 +64,18 @@ static void test_occlusion( Light *li, FogTile *cur, FogTile *prev )
 
 		float a, b;
 
-		/*
+	#if 0
 		// check if tile centre is inside the shadow cone
 		a = cross_z( prev->sa, cur->sc );
 		b = cross_z( cur->sc, prev->sb );
-		*/
-
+	#else
 		// check if the shadow cone touches the tile even a little bit
 		// (less light leakage)
 		a = cross_z( prev->sa, cur->sb );
 		b = cross_z( cur->sa, prev->sb );
+	#endif
 
-		if ( a >= 0 && b >= 0 ) {
+		if ( a > 0 && b > 0 ) {
 
 			for( int i=0; i<2; i++ ) {
 				cur->sa[i] = prev->sa[i];
@@ -185,6 +185,27 @@ static void get_limits_neg( int xi, float x, float r, int out[3], int max_x )
 	out[2] = -1;
 }
 
+static void noise_reduction_pass( void )
+{
+	int y, x;
+	for( y=1; y<MAP_H-1; y++ ) {
+		for( x=1; x<MAP_W-1; x++ ) {
+			int f[9], *fp=f;
+			int black = 0;
+			for( int dx=-1; dx<=1; dx++ ) {
+				for( int dy=-1; dy<=1; dy++ ) {
+					int fog = fog_layer[y+dy][x+dx];
+					*fp++ = fog;
+					black += fog != 0;
+				}
+			}
+
+			if ( black < 3 )
+				fog_layer[y][x] = 0;
+		}
+	}
+}
+
 void calc_fog( Light *li )
 {
 	memset( fog_layer, 1, sizeof( fog_layer ) );
@@ -206,6 +227,11 @@ void calc_fog( Light *li )
 		int *x = lx[sector & 1];
 		int *y = ly[sector >> 1];
 		clear_sector( li, sector, x[0], x[1], x[2], y[0], y[1], y[2], rr );
+	}
+
+	if ( 0 ) {
+		for( int i=0; i<3; i++ )
+			noise_reduction_pass();
 	}
 }
 
