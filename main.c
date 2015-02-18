@@ -6,7 +6,7 @@
 #include "fog.h"
 #include "render.h"
 
-#define LIGHT_R 35
+#define LIGHT_R 15
 
 static Light light = {
 	.pos = {MAP_W/2,MAP_H/2,128},
