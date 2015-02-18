@@ -6,9 +6,11 @@
 #include "fog.h"
 #include "render.h"
 
+#define LIGHT_R 35
+
 static Light light = {
 	.pos = {MAP_W/2,MAP_H/2,128},
-	.radius = 80,
+	.radius = LIGHT_R,
 };
 
 static void set_light_xy( int x, int y )
@@ -44,6 +46,23 @@ static int process_events( void )
 						break;
 					case SDLK_LEFT:
 						light.pos[2] -= lz2;
+						break;
+					case SDLK_z:
+						light.radius = light.radius < 100
+							? 400 : LIGHT_R;
+						break;
+					case SDLK_f:
+						light.pos[2] =
+							terrain_z
+							[(int)light.pos[1]]
+							[(int)light.pos[0]]
+							+ 5.0f;
+						break;
+					case SDLK_1:
+						the_fog_function = calc_fog1;
+						break;
+					case SDLK_2:
+						the_fog_function = calc_fog2;
 						break;
 					default:
 						break;

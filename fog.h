@@ -6,6 +6,10 @@ typedef struct Light {
 	float radius; 
 } Light;
 
+extern void (*the_fog_function)( Light * );
+void calc_fog1( Light *li );
+void calc_fog2( Light *li );
+
 void calc_fog( Light *li );
 
 #endif
