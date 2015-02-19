@@ -9,50 +9,58 @@ typedef struct {
 	float cell_off[2];
 } RayConfig;
 
-static void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_max )
+void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_max )
 {
 	const int *cell_end = rc->cell_end;
 	const int *cell_inc = rc->cell_inc;
 	int cell[2], i;
+	float abs_dir[2];
 	float t[2], t_inc[2];
-	float ray_len;
 
-	float max_slope = -8e100;
+	float lz = -10000; // lowest Z coordinate that can be seen
+	float lz_slope = 0;
 
 	for( i=0; i<2; i++ ) {
+		float ad = fabs( dir[i] );
+		float iad = 1.0f / ad;
+		abs_dir[i] = ad;
 		cell[i] = rc->cell_start[i];
-		t_inc[i] = fabs( 1.0f / dir[i] );
-		t[i] = fabs( rc->cell_off[i] / dir[i] );
+		t_inc[i] = iad;
+		t[i] = rc->cell_off[i] * iad;
 	}
 
-	fog_layer[cell[1]][cell[0]] = 0;
+	//fog_layer[cell[1]][cell[0]] = 0;
 
 	for( ;; ) {
+		float ray_len;
+
 		if ( t[0] < t[1] ) {
-			ray_len = t[0];
-			t[0] += t_inc[0];
 			cell[0] += cell_inc[0];
 			if ( cell[0] == cell_end[0] )
 				break;
+			ray_len = t[0];
+			t[0] += t_inc[0];
+			lz += lz_slope * abs_dir[0];
 		} else {
-			ray_len = t[1];
-			t[1] += t_inc[1];
 			cell[1] += cell_inc[1];
 			if ( cell[1] == cell_end[1] )
 				break;
+			ray_len = t[1];
+			t[1] += t_inc[1];
+			lz += lz_slope * abs_dir[1];
+		}
+
+		unsigned char *fog = &fog_layer[cell[1]][cell[0]];
+		float z = terrain_z[cell[1]][cell[0]];
+
+		if ( z > lz ) {
+			lz = z;
+			lz_slope = ( z - org[2] ) / ray_len;
+			*fog = 0;
 		}
 
 		if ( ray_len > ray_len_max )
 			break;
-
-		unsigned char *fog = &fog_layer[cell[1]][cell[0]];
-		float z = terrain_z[cell[1]][cell[0]];
-		float slope = ( z - org[2] ) / ray_len;
-
-		if ( slope > max_slope ) {
-			max_slope = slope;
-			*fog = 0; //z < org[2];
-		}
 	}
 }
 
@@ -82,7 +90,8 @@ static RayConfig get_ray_config( Light *li, int q )
 		if ( dir_is_neg[q][i] ) {
 			rc.cell_end[i] = -1;
 			rc.cell_inc[i] = -1;
-			rc.cell_off[i] = c - org[i];
+			//rc.cell_off[i] = c - org[i]; // negative offset
+			rc.cell_off[i] = org[i] - c; // positive offset
 		} else {
 			rc.cell_end[i] = dim[i];
 			rc.cell_inc[i] = 1;
@@ -127,7 +136,7 @@ static void shoot_rays_quadrant( Light *li, int q, int num_rays )
 
 void calc_fog2( Light *li )
 {
-	int q, n=25;
+	int q, n=10000;
 	for( q=0; q<4; q++ )
 		shoot_rays_quadrant( li, q, n );
 }
