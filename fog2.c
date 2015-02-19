@@ -4,6 +4,7 @@
 
 #define get_height(x,y) terrain_z[(y)][(x)]
 #define clear_fog(x,y) fog_layer[(y)][(x)]=0
+#define in_map_bounds(x,y) ((x) > -1 && (y) > -1 && (x) < MAP_W && (y) < MAP_H)
 
 typedef struct {
 	int cell_start[2];
@@ -12,7 +13,7 @@ typedef struct {
 	float cell_off[2];
 } RayConfig;
 
-void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_max )
+static void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_max )
 {
 	const int *cell_end = rc->cell_end;
 	const int *cell_inc = rc->cell_inc;
@@ -35,14 +36,14 @@ void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_m
 
 	do {
 		if ( t[0] < t[1] ) {
-			cell[0] += cell_inc[0];
 			cl = t[0];
+			cell[0] += cell_inc[0];
 			t[0] += t_inc[0];
 			if ( cell[0] == cell_end[0] )
 				break;
 		} else {
-			cell[1] += cell_inc[1];
 			cl = t[1];
+			cell[1] += cell_inc[1];
 			t[1] += t_inc[1];
 			if ( cell[1] == cell_end[1] )
 				break;
@@ -50,7 +51,8 @@ void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_m
 
 		cz = get_height( cell[0], cell[1] ) - org[2];
 
-		if ( cl*hz - hl*cz < 0 ) {
+		// test sign of cross product
+		if ( cl*hz < hl*cz ) {
 			hl = cl;
 			hz = cz;
 			clear_fog( cell[0], cell[1] );
@@ -71,22 +73,20 @@ static RayConfig get_ray_config( Light *li, int q )
 	--+-->
 	2 | 3
 	*/
-	const signed char dir_is_neg[4][2] = {
-		{0,0},
-		{1,0},
-		{1,1},
-		{0,1}
-	};
+
+	int sector_sign_bits = 0x2d;
 	int dim[2] = {MAP_W, MAP_H};
+	q = 1 << ( q << 1 );
 
 	for( i=0; i<2; i++ ) {
 		int c = org[i];
 		rc.cell_start[i] = c;
-		if ( dir_is_neg[q][i] ) {
+
+		if ( sector_sign_bits >> i & q ) {
+			// negative ray direction
 			rc.cell_end[i] = -1;
 			rc.cell_inc[i] = -1;
-			//rc.cell_off[i] = c - org[i]; // negative offset
-			rc.cell_off[i] = org[i] - c; // positive offset
+			rc.cell_off[i] = org[i] - c;
 		} else {
 			rc.cell_end[i] = dim[i];
 			rc.cell_inc[i] = 1;
@@ -95,11 +95,6 @@ static RayConfig get_ray_config( Light *li, int q )
 	}
 
 	return rc;
-}
-
-static int in_map_bounds( int x, int y )
-{
-	return x > -1 && y > -1 && x < MAP_W && y < MAP_H;
 }
 
 static void shoot_rays_quadrant( Light *li, int q, int num_rays )
@@ -131,7 +126,7 @@ static void shoot_rays_quadrant( Light *li, int q, int num_rays )
 
 void calc_fog2( Light *li )
 {
-	int q, n=25000;
+	int q, n=2*li->radius;
 	for( q=0; q<4; q++ )
 		shoot_rays_quadrant( li, q, n );
 }
