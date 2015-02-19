@@ -12,11 +12,6 @@ typedef struct {
 	float cell_off[2];
 } RayConfig;
 
-static float cross_z( float a[2], float b[2] )
-{
-	return a[0]*b[1] - b[0]*a[1];
-}
-
 void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_max )
 {
 	const int *cell_end = rc->cell_end;
@@ -25,8 +20,10 @@ void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_m
 	float t[2], t_inc[2];
 
 	// (length,height) vector from eye to the last hill
-	float hl = -1;
-	float hz = 0;
+	float hl = -1, hz = 0;
+
+	// (length,height) vector from eye to current tile
+	float cl, cz;
 
 	for( i=0; i<2; i++ ) {
 		float abs_dir = fabs( dir[i] );
@@ -36,10 +33,7 @@ void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_m
 		t[i] = rc->cell_off[i] * inv_abs_dir;
 	}
 
-	for( ;; ) {
-		// (length,height) vector from eye to current tile
-		float cl, cz;
-
+	do {
 		if ( t[0] < t[1] ) {
 			cell[0] += cell_inc[0];
 			if ( cell[0] == cell_end[0] )
@@ -61,10 +55,7 @@ void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_m
 			hz = cz;
 			clear_fog( cell[0], cell[1] );
 		}
-
-		if ( cl > ray_len_max )
-			break;
-	}
+	} while( cl > ray_len_max );
 }
 
 static RayConfig get_ray_config( Light *li, int q )
@@ -139,7 +130,7 @@ static void shoot_rays_quadrant( Light *li, int q, int num_rays )
 
 void calc_fog2( Light *li )
 {
-	int q, n=10000;
+	int q, n=25000;
 	for( q=0; q<4; q++ )
 		shoot_rays_quadrant( li, q, n );
 }
