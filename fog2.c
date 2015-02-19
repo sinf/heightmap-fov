@@ -20,7 +20,7 @@ void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_m
 	float t[2], t_inc[2];
 
 	// (length,height) vector from eye to the last hill
-	float hl = -1, hz = 0;
+	float hl = 0, hz = -1;
 
 	// (length,height) vector from eye to current tile
 	float cl, cz;
@@ -36,21 +36,21 @@ void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_m
 	do {
 		if ( t[0] < t[1] ) {
 			cell[0] += cell_inc[0];
-			if ( cell[0] == cell_end[0] )
-				break;
 			cl = t[0];
 			t[0] += t_inc[0];
+			if ( cell[0] == cell_end[0] )
+				break;
 		} else {
 			cell[1] += cell_inc[1];
-			if ( cell[1] == cell_end[1] )
-				break;
 			cl = t[1];
 			t[1] += t_inc[1];
+			if ( cell[1] == cell_end[1] )
+				break;
 		}
 
-		cz = org[2] - get_height( cell[0], cell[1] );
+		cz = get_height( cell[0], cell[1] ) - org[2];
 
-		if ( cl*hz - hl*cz > 0 ) {
+		if ( cl*hz - hl*cz < 0 ) {
 			hl = cl;
 			hz = cz;
 			clear_fog( cell[0], cell[1] );
