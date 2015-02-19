@@ -55,7 +55,8 @@ void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_m
 			hz = cz;
 			clear_fog( cell[0], cell[1] );
 		}
-	} while( cl > ray_len_max );
+	} while( cl < ray_len_max );
+
 }
 
 static RayConfig get_ray_config( Light *li, int q )
