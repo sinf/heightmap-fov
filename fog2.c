@@ -2,6 +2,9 @@
 #include "map.h"
 #include "fog.h"
 
+#define get_height(x,y) terrain_z[(y)][(x)]
+#define clear_fog(x,y) fog_layer[(y)][(x)]=0
+
 typedef struct {
 	int cell_start[2];
 	int cell_end[2];
@@ -9,57 +12,57 @@ typedef struct {
 	float cell_off[2];
 } RayConfig;
 
+static float cross_z( float a[2], float b[2] )
+{
+	return a[0]*b[1] - b[0]*a[1];
+}
+
 void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_max )
 {
 	const int *cell_end = rc->cell_end;
 	const int *cell_inc = rc->cell_inc;
 	int cell[2], i;
-	float abs_dir[2];
 	float t[2], t_inc[2];
 
-	float lz = -10000; // lowest Z coordinate that can be seen
-	float lz_slope = 0;
+	// (length,height) vector from eye to the last hill
+	float hl = -1;
+	float hz = 0;
 
 	for( i=0; i<2; i++ ) {
-		float ad = fabs( dir[i] );
-		float iad = 1.0f / ad;
-		abs_dir[i] = ad;
+		float abs_dir = fabs( dir[i] );
+		float inv_abs_dir = 1.0f / abs_dir;
 		cell[i] = rc->cell_start[i];
-		t_inc[i] = iad;
-		t[i] = rc->cell_off[i] * iad;
+		t_inc[i] = inv_abs_dir;
+		t[i] = rc->cell_off[i] * inv_abs_dir;
 	}
 
-	//fog_layer[cell[1]][cell[0]] = 0;
-
 	for( ;; ) {
-		float ray_len;
+		// (length,height) vector from eye to current tile
+		float cl, cz;
 
 		if ( t[0] < t[1] ) {
 			cell[0] += cell_inc[0];
 			if ( cell[0] == cell_end[0] )
 				break;
-			ray_len = t[0];
+			cl = t[0];
 			t[0] += t_inc[0];
-			lz += lz_slope * abs_dir[0];
 		} else {
 			cell[1] += cell_inc[1];
 			if ( cell[1] == cell_end[1] )
 				break;
-			ray_len = t[1];
+			cl = t[1];
 			t[1] += t_inc[1];
-			lz += lz_slope * abs_dir[1];
 		}
 
-		unsigned char *fog = &fog_layer[cell[1]][cell[0]];
-		float z = terrain_z[cell[1]][cell[0]];
+		cz = org[2] - get_height( cell[0], cell[1] );
 
-		if ( z > lz ) {
-			lz = z;
-			lz_slope = ( z - org[2] ) / ray_len;
-			*fog = 0;
+		if ( cl*hz - hl*cz > 0 ) {
+			hl = cl;
+			hz = cz;
+			clear_fog( cell[0], cell[1] );
 		}
 
-		if ( ray_len > ray_len_max )
+		if ( cl > ray_len_max )
 			break;
 	}
 }
