@@ -17,7 +17,7 @@ static void raycast( const RayConfig rc[1], float org[3], float dir[2], float ra
 	float t[2], t_inc[2];
 	float ray_len;
 
-	float max_slope = -1e100;
+	float max_slope = -8e100;
 
 	for( i=0; i<2; i++ ) {
 		cell[i] = rc->cell_start[i];
@@ -49,7 +49,7 @@ static void raycast( const RayConfig rc[1], float org[3], float dir[2], float ra
 		float z = terrain_z[cell[1]][cell[0]];
 		float slope = ( z - org[2] ) / ray_len;
 
-		if ( max_slope < slope ) {
+		if ( slope > max_slope ) {
 			max_slope = slope;
 			*fog = 0; //z < org[2];
 		}
@@ -104,22 +104,30 @@ static void shoot_rays_quadrant( Light *li, int q, int num_rays )
 	float a_inc = M_PI_2 / num_rays;
 	float a = a_inc * 0.5f + q * M_PI;
 	int i;
+	float dir[2];
+	float inc[2];
 
 	if ( !in_map_bounds( rc.cell_start[0], rc.cell_start[1] ) )
 		return;
+	
+	dir[0] = cos( a );
+	dir[1] = sin( a );
+
+	inc[0] = cos( a_inc );
+	inc[1] = sin( a_inc );
 
 	for( i=0; i<num_rays; i++ ) {
-		float dir[2];
-		dir[0] = cos( a );
-		dir[1] = sin( a );
 		raycast( &rc, li->pos, dir, li->radius );
-		a += a_inc;
+		float old_c = dir[0];
+		float old_s = dir[1];
+		dir[0] = inc[0]*old_c - inc[1]*old_s;
+		dir[1] = inc[1]*old_c + inc[0]*old_s;
 	}
 }
 
 void calc_fog2( Light *li )
 {
-	int q, n=15;
+	int q, n=25;
 	for( q=0; q<4; q++ )
 		shoot_rays_quadrant( li, q, n );
 }
