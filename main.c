@@ -21,6 +21,8 @@ static void set_light_xy( int x, int y )
 
 static int process_events( void )
 {
+	float radii[] = {15, 30, 50, 100, 400};
+	static int rm = 0;
 	float lz = 1, lz2 = 10;
 	SDL_Event e;
 	while( SDL_PollEvent( &e ) ) {
@@ -50,6 +52,10 @@ static int process_events( void )
 					case SDLK_z:
 						light.radius = light.radius < 100
 							? 400 : LIGHT_R;
+						break;
+					case SDLK_m:
+						light.radius = radii[rm];
+						rm = ( rm + 1 ) % 5;
 						break;
 					case SDLK_f:
 						light.pos[2] =

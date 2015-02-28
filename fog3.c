@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
 #include <assert.h>
@@ -14,8 +15,8 @@ typedef float DReal;
 
 typedef struct {
 	// scanline limits
-	float x0, x1;
-	float dx0dy, dx1dy;
+	Real x0, x1;
+	Real dx0dy, dx1dy;
 	// {a,b}: vector to the last occluder, projected to YZ plane
 	// a=y, b=z
 	Real a, b;
@@ -33,6 +34,7 @@ typedef struct {
 	*/
 	Real eye[3];
 	Real max_dist_sq;
+	Real max_dist;
 } FogWorld;
 
 void scan_sectors_1(
@@ -105,14 +107,37 @@ void scan_sectors_1(
 	}
 }
 
-void scan_sectors(
-	Sector sectors[], int n_sec,
+void scan_sectors( int n_sec,
 	int row, int row_step, int row_end, Real ry,
 	FogWorld world )
 {
+	Sector sectors[n_sec];
+
+	/* initialize sectors */
+	Real prev_dxdy = -1;
+	Real prev_x = world.eye[0] - ry;
+	for( int s=0; s<n_sec; s++ ) {
+		Sector *sec = sectors + s;
+
+		sec->a = sec->b = 0;
+		sec->alive = 1;
+		sec->junk = 0;
+
+		Real t = ( 2.0f*(s+1) - n_sec + 1 ) / n_sec;
+
+		sec->dx0dy = prev_dxdy;
+		sec->dx1dy = prev_dxdy = t;
+
+		sec->x0 = prev_x;
+		sec->x1 = world.eye[0] + ry * t;
+
+		assert( sec->x1 >= sec->x0 );
+
+		prev_x = sec->x1;
+	}
+
 	// ry: y (=row) coordinate relative to eye
-	const Real ry2_inc = ry + ry + 1;
-	Real ry2 = ry * ry;
+	// rx,ry,rz: vector to terrain vertex relative to eye position
 
 	while( row != row_end ) {
 
@@ -121,18 +146,19 @@ void scan_sectors(
 		col0 = MAX( col0, 0 );
 		col1 = MIN( col1, world.max_col );
 
-		if ( col1 < col0 )
-			goto next_row;
-
 		int cell_index = ( row << world.shl_row ) + ( col0 << world.shl_col );
 
 		int col = col0;
-		Real rx = col - world.eye[0];
+
+		const Real ry2 = ry * ry;
+		Real rx = col0 + 0.5f - world.eye[0];
 		Real rx2 = rx * rx;
 
-		const Real radius_sq_inc = rx + rx + 1;
 		Real radius_sq = rx2 + ry2;
 		Sector *sec = sectors;
+
+		if ( col1 < col0 )
+			goto next_row;
 
 		do {
 			assert( sec < sectors + n_sec );
@@ -148,7 +174,7 @@ void scan_sectors(
 
 			Real min_rz = 10000000;
 
-			do {
+			for( ;; ) {
 				Real rz = world.z[cell_index] - world.eye[2];
 
 				if ( limit <= prev_a*rz ) {
@@ -160,14 +186,17 @@ void scan_sectors(
 					if ( radius_sq < world.max_dist_sq )
 						world.fog[cell_index] = 0;
 				}
+
 				if ( col < sec_end ) {
 					col += 1;
 					cell_index += 1 << world.shl_col;
-					radius_sq += radius_sq_inc;
+					radius_sq += rx + rx + 1;
+					rx += 1;
 					continue;
 				}
-			} while( 0 );
 
+				break;
+			}
 			sec += 1;
 		} while( col < col1 );
 
@@ -179,48 +208,16 @@ void scan_sectors(
 			sec->x1 += sec->dx1dy;
 		}
 
-		ry += 1;
-		ry2 += ry2_inc;
 		row += row_step;
-	}
-}
-
-void make_sectors( Sector sectors[], int count, float a, float a_inc, float off_y, float tx, int swap )
-{
-	int i;
-	float u, v;
-	if ( swap ) {
-		u = sin( a );
-		v = cos( a );
-	} else {
-		u = cos( a );
-		v = sin( a );
-	}
-	float prev_dx1dy = u;
-	float prev_x0 = v * off_y + tx;
-	for( i=0; i<count; i++ ) {
-		Sector *sec = sectors + i;
-		a += a_inc;
-		u = cos( a );
-		v = sin( a );
-		if ( swap ) {
-			float tmp = v;
-			v = u;
-			u = tmp;
-		}
-		sec->a = 1;
-		sec->b = -10000000;
-		sec->dx0dy = prev_dx1dy;
-		sec->dx1dy = prev_dx1dy = u;
-		sec->x0 = prev_x0;
-		sec->x1 = prev_x0 = v * off_y + tx;
-		sec->alive = 1;
+		ry += 1;
 	}
 }
 
 void calc_fog3( Light li[1] )
 {
-	Real rr = li->radius * li->radius;
+	Real r = li->radius;
+	Real rr = r * r;
+
 	FogWorld world_xy =  {
 		.z = terrain_z[0],
 		.fog = fog_layer[0],
@@ -229,6 +226,7 @@ void calc_fog3( Light li[1] )
 		.max_col = TERRAIN_W-1,
 		.eye = {li->pos[0], li->pos[1], li->pos[2]},
 		.max_dist_sq = rr,
+		.max_dist = r,
 	};
 	FogWorld world_yx =  {
 		.z = terrain_z[0],
@@ -238,6 +236,7 @@ void calc_fog3( Light li[1] )
 		.max_col = TERRAIN_H-1,
 		.eye = {li->pos[1], li->pos[0], li->pos[2]},
 		.max_dist_sq = rr,
+		.max_dist = r,
 	};
 
 	const int n_sectors = 256;
@@ -255,23 +254,6 @@ void calc_fog3( Light li[1] )
 
 	cell[2] = li->pos[2];
 
-	Sector sec[4][n_sectors];
-	float a_inc = M_PI_2 / n_sectors;
-
-	make_sectors( sec[0], n_sectors,
-		M_PI - M_PI_4, -a_inc,
-		1.0f - cell_off[1], li->pos[0], 0 );
-	make_sectors( sec[1], n_sectors,
-		M_PI + M_PI_4, a_inc,
-		cell_off[1], li->pos[0], 0 );
-	make_sectors( sec[2], n_sectors,
-		-M_PI_4, a_inc,
-		1.0f - cell_off[0], li->pos[1], 1 );
-	make_sectors( sec[3], n_sectors,
-		M_PI + M_PI_4, -a_inc,
-		cell_off[0], li->pos[1], 1 );
-
-	int r = li->radius;
 	int y0 = cell[1] - r - 1;
 	int y1 = cell[1] + r + 1;
 	y0 = MAX( y0, -1 );
@@ -288,25 +270,25 @@ void calc_fog3( Light li[1] )
 	int q = 0xF;
 
 	if ( q & 1 )
-	scan_sectors( sec[0], n_sectors,
+	scan_sectors( n_sectors,
 		cell[1], 1, y1,
 		1.0f - cell_off[1],
 		world_xy );
 
 	if ( q & 2 )
-	scan_sectors( sec[1], n_sectors,
+	scan_sectors( n_sectors,
 		cell[1], -1, y0,
 		cell_off[1],
 		world_xy );
 	
 	if ( q & 4 )
-	scan_sectors( sec[2], n_sectors,
+	scan_sectors( n_sectors,
 		cell[0], 1, x1,
 		1.0f - cell_off[0],
 		world_yx );
 
 	if ( q & 8 )
-	scan_sectors( sec[3], n_sectors,
+	scan_sectors( n_sectors,
 		cell[0], -1, x0,
 		cell_off[0],
 		world_yx );
