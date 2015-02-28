@@ -59,10 +59,13 @@ static int process_events( void )
 							+ 5.0f;
 						break;
 					case SDLK_1:
-						the_fog_function = calc_fog1;
-						break;
 					case SDLK_2:
-						the_fog_function = calc_fog2;
+					case SDLK_3:
+						the_fog_function = (FogFunction[]){
+							calc_fog1,
+							calc_fog2,
+							calc_fog3
+						}[ e.key.keysym.sym - SDLK_1 ];
 						break;
 					default:
 						break;

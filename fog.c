@@ -2,7 +2,7 @@
 #include "map.h"
 #include "fog.h"
 
-void (*the_fog_function)( Light * ) = calc_fog1;
+void (*the_fog_function)( Light * ) = calc_fog2;
 
 static void noise_reduction_pass( void )
 {
@@ -19,7 +19,7 @@ static void noise_reduction_pass( void )
 				}
 			}
 
-			if ( black < 5 )
+			if ( black <= 2 )
 				fog_layer[y][x] = 0;
 		}
 	}
@@ -30,9 +30,7 @@ void calc_fog( Light *li )
 	memset( fog_layer, 1, sizeof( fog_layer ) );
 	the_fog_function( li );
 
-	if ( 1 ) {
-		for( int i=0; i<1; i++ )
-			noise_reduction_pass();
-	}
+	if ( 0 )
+		noise_reduction_pass();
 }
 

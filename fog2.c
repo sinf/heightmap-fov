@@ -2,10 +2,6 @@
 #include "map.h"
 #include "fog.h"
 
-#define get_height(x,y) terrain_z[(y)][(x)]
-#define clear_fog(x,y) fog_layer[(y)][(x)]=0
-#define in_map_bounds(x,y) ((x) > -1 && (y) > -1 && (x) < MAP_W && (y) < MAP_H)
-
 typedef struct {
 	int cell_start[2];
 	int cell_end[2];
