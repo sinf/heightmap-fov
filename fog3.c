@@ -21,7 +21,7 @@ typedef struct {
 	// a=y, b=z
 	Real a, b;
 	int alive;
-	int junk;
+	int padding;
 } Sector;
 
 typedef struct {
@@ -37,11 +37,38 @@ typedef struct {
 	Real max_dist;
 } FogWorld;
 
-void scan_sectors_1(
-	Sector sectors[], int n_sec,
+static void init_sectors( Sector sectors[], int n_sec, Real ry, Real eye_x )
+{
+	/* initialize sectors */
+	Real prev_dxdy = -1;
+	Real prev_x = eye_x - ry;
+	for( int s=0; s<n_sec; s++ ) {
+		Sector *sec = sectors + s;
+
+		sec->a = sec->b = 0;
+		sec->alive = 1;
+
+		Real t = ( 2.0f*(s+1) - n_sec + 1 ) / n_sec;
+
+		sec->dx0dy = prev_dxdy;
+		sec->dx1dy = prev_dxdy = t;
+
+		sec->x0 = prev_x;
+		sec->x1 = eye_x + ry * t;
+
+		assert( sec->x1 >= sec->x0 );
+
+		prev_x = sec->x1;
+	}
+}
+
+void scan_sectors_1( int n_sec,
 	int row, int row_step, int row_end, Real ry,
 	FogWorld world )
 {
+	Sector sectors[n_sec];
+	init_sectors( sectors, n_sec, ry, world.eye[0] );
+
 	while( row != row_end ) {
 		Real ry2 = ry * ry;
 		int s;
@@ -63,15 +90,18 @@ void scan_sectors_1(
 
 			int any_in_range = 0;
 			int x;
+			Real limit = ry * prev_b;
 
 			// if a sector is so thin it doesn't contain even a single cell
 			// then this workaround is needed to prevent too early sector termination
 			any_in_range |= x1 <= x0;
 
 			for( x=x0; x<=x1; x++ ) {
-				int cell_index = ( row << world.shl_row ) + ( x << world.shl_col );
-				Real a, b, rx, rz, z;
+				const int cell_index =
+					( row << world.shl_row )
+					+ ( x << world.shl_col );
 
+				Real rx, rz, z;
 				z = world.z[cell_index];
 
 				/* {rx,ry,rz} is the vector from light to terrain vertex */
@@ -81,24 +111,18 @@ void scan_sectors_1(
 				int in_range = ( rx*rx + ry2 < world.max_dist_sq );
 				any_in_range |= in_range;
 
-				/* {a,b} is {rx,ry,rz} projected to the YZ plane */
-				a = ry;
-				b = rz;
-
-				if ( a*prev_b <= prev_a*b ) {
+				if ( limit <= prev_a*rz ) {
 					if ( rz < min_rz ) {
 						min_rz = rz;
-						sec->a = a;
-						sec->b = b;
+						sec->a = ry;
+						sec->b = rz;
 					}
-					if ( in_range ) {
+					if ( in_range )
 						world.fog[cell_index] = 0;
-					}
 				}
 			}
 
 			sec->alive = any_in_range;
-
 			sec->x0 += sec->dx0dy;
 			sec->x1 += sec->dx1dy;
 		}
@@ -112,29 +136,7 @@ void scan_sectors( int n_sec,
 	FogWorld world )
 {
 	Sector sectors[n_sec];
-
-	/* initialize sectors */
-	Real prev_dxdy = -1;
-	Real prev_x = world.eye[0] - ry;
-	for( int s=0; s<n_sec; s++ ) {
-		Sector *sec = sectors + s;
-
-		sec->a = sec->b = 0;
-		sec->alive = 1;
-		sec->junk = 0;
-
-		Real t = ( 2.0f*(s+1) - n_sec + 1 ) / n_sec;
-
-		sec->dx0dy = prev_dxdy;
-		sec->dx1dy = prev_dxdy = t;
-
-		sec->x0 = prev_x;
-		sec->x1 = world.eye[0] + ry * t;
-
-		assert( sec->x1 >= sec->x0 );
-
-		prev_x = sec->x1;
-	}
+	init_sectors( sectors, n_sec, ry, world.eye[0] );
 
 	// ry: y (=row) coordinate relative to eye
 	// rx,ry,rz: vector to terrain vertex relative to eye position
@@ -151,7 +153,7 @@ void scan_sectors( int n_sec,
 		int col = col0;
 
 		const Real ry2 = ry * ry;
-		Real rx = col0 + 0.5f - world.eye[0];
+		Real rx = col0 - world.eye[0];
 		Real rx2 = rx * rx;
 
 		Real radius_sq = rx2 + ry2;
@@ -239,7 +241,7 @@ void calc_fog3( Light li[1] )
 		.max_dist = r,
 	};
 
-	const int n_sectors = 256;
+	const int n_sectors = 300;
 	int32_t cell[3];
 	float cell_off[2];
 	int i;
@@ -269,6 +271,10 @@ void calc_fog3( Light li[1] )
 
 	int q = 0xF;
 
+	#if 1
+	#define scan_sectors scan_sectors_1
+	#endif
+
 	if ( q & 1 )
 	scan_sectors( n_sectors,
 		cell[1], 1, y1,
@@ -277,7 +283,7 @@ void calc_fog3( Light li[1] )
 
 	if ( q & 2 )
 	scan_sectors( n_sectors,
-		cell[1], -1, y0,
+		cell[1]+1, -1, y0,
 		cell_off[1],
 		world_xy );
 	
@@ -289,7 +295,7 @@ void calc_fog3( Light li[1] )
 
 	if ( q & 8 )
 	scan_sectors( n_sectors,
-		cell[0], -1, x0,
+		cell[0]+1, -1, x0,
 		cell_off[0],
 		world_yx );
 }
