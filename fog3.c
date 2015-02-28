@@ -14,12 +14,12 @@ typedef float DReal;
 #endif
 
 typedef struct {
-	// scanline limits
-	Real x0, x1;
-	Real dx0dy, dx1dy;
+	// right edge of the scanline
+	// (left edge is always the right edge of the previous sector)
+	Real x1, dx1dy;
+	Real a, b;
 	// {a,b}: vector to the last occluder, projected to YZ plane
 	// a=y, b=z
-	Real a, b;
 } Sector;
 
 typedef struct {
@@ -38,26 +38,15 @@ typedef struct {
 static void init_sectors( Sector sectors[], int n_sec, Real ry, Real eye_x )
 {
 	/* initialize sectors */
-	Real prev_dxdy = -1;
-	Real prev_x = eye_x - ry;
 	for( int s=0; s<n_sec; s++ ) {
 		Sector *sec = sectors + s;
-
 		sec->a = sec->b = 0;
-		//sec->alive = 1;
-
 		Real t = ( 2.0f*(s+1) - n_sec + 1 ) / n_sec;
-
-		sec->dx0dy = prev_dxdy;
-		sec->dx1dy = prev_dxdy = t;
-
-		sec->x0 = prev_x;
+		sec->dx1dy = t;
 		sec->x1 = eye_x + ry * t;
-
-		assert( sec->x1 >= sec->x0 );
-
-		prev_x = sec->x1;
 	}
+
+	//__asm__ volatile ( "nop; nop; addl $0, %eax; nop; nop; nop;" );
 }
 
 void scan_sectors_1( int n_sec,
@@ -69,6 +58,7 @@ void scan_sectors_1( int n_sec,
 
 	while( row != row_end ) {
 		Real ry2 = ry * ry;
+		Real prev_x0 = world.eye[0] - ry;
 		int s;
 		for( s=0; s<n_sec; s++ ) {
 			Sector *sec = sectors + s;
@@ -78,8 +68,9 @@ void scan_sectors_1( int n_sec,
 
 			Real min_rz = 1000000;
 
-			int x0 = sec->x0;
+			int x0 = prev_x0;
 			int x1 = (int) sec->x1; // + 1;
+			prev_x0 = x1;
 			x0 = MAX( x0, 0 );
 			x1 = MIN( x1, TERRAIN_W-1 );
 
@@ -109,94 +100,8 @@ void scan_sectors_1( int n_sec,
 						world.fog[cell_index] = 0;
 				}
 			}
-
-			sec->x0 += sec->dx0dy;
 			sec->x1 += sec->dx1dy;
 		}
-		row += row_step;
-		ry += 1;
-	}
-}
-
-void scan_sectors( int n_sec,
-	int row, int row_step, int row_end, Real ry,
-	FogWorld world )
-{
-	Sector sectors[n_sec];
-	init_sectors( sectors, n_sec, ry, world.eye[0] );
-
-	// ry: y (=row) coordinate relative to eye
-	// rx,ry,rz: vector to terrain vertex relative to eye position
-
-	while( row != row_end ) {
-
-		int col0 = sectors[0].x0;
-		int col1 = sectors[n_sec-1].x1;
-		col0 = MAX( col0, 0 );
-		col1 = MIN( col1, world.max_col );
-
-		int cell_index = ( row << world.shl_row ) + ( col0 << world.shl_col );
-
-		int col = col0;
-
-		const Real ry2 = ry * ry;
-		Real rx = col0 - world.eye[0];
-		Real rx2 = rx * rx;
-
-		Real radius_sq = rx2 + ry2;
-		Sector *sec = sectors;
-
-		if ( col1 < col0 )
-			goto next_row;
-
-		do {
-			assert( sec < sectors + n_sec );
-
-			const Real
-				prev_a = sec->a,
-				prev_b = sec->b;
-
-			const Real limit = ry * prev_b;
-
-			int sec_end = sec->x1;
-			sec_end = MIN( col1, sec_end );
-
-			Real min_rz = 10000000;
-
-			for( ;; ) {
-				Real rz = world.z[cell_index] - world.eye[2];
-
-				if ( limit <= prev_a*rz ) {
-					if ( rz < min_rz ) {
-						min_rz = rz;
-						sec->a = ry;
-						sec->b = rz;
-					}
-					if ( radius_sq < world.max_dist_sq )
-						world.fog[cell_index] = 0;
-				}
-
-				if ( col < sec_end ) {
-					col += 1;
-					cell_index += 1 << world.shl_col;
-					radius_sq += rx + rx + 1;
-					rx += 1;
-					continue;
-				}
-
-				break;
-			}
-			sec += 1;
-		} while( col < col1 );
-
-		next_row:;
-
-		for( int s=0; s<n_sec; s++ ) {
-			Sector *sec = sectors + s;
-			sec->x0 += sec->dx0dy;
-			sec->x1 += sec->dx1dy;
-		}
-
 		row += row_step;
 		ry += 1;
 	}

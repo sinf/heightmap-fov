@@ -5,17 +5,20 @@ LIBS=-lm -lfreeimage $(shell sdl-config --libs) $(shell pkg-config --libs gl gle
 SRC=$(wildcard *.c)
 DEBUG=fog.debug
 FAST=fog
+SMALL=fog.small
 
-.PHONY: clean all target debug fast
+.PHONY: clean all target
 
-all: $(DEBUG) $(FAST)
+all: $(DEBUG) $(FAST) $(SMALL)
 
 $(DEBUG): $(SRC) Makefile
 	make XFLAGS="-g -O0" TARGET=$@ target
 $(FAST): $(SRC) Makefile
 	make XFLAGS="-g -O3 -DNDEBUG" TARGET=$@ target
+$(SMALL): $(SRC) Makefile
+	make XFLAGS="-g -Os -DNDEBUG" TARGET=$@ target
 target: $(SRC)
 	gcc -o $(TARGET) $(SRC) $(LIBS) $(CFLAGS) 
 clean:
-	rm -f $(DEBUG) $(FAST)
+	rm -f $(DEBUG) $(FAST) $(SMALL)
 
