@@ -20,8 +20,6 @@ typedef struct {
 	// {a,b}: vector to the last occluder, projected to YZ plane
 	// a=y, b=z
 	Real a, b;
-	int alive;
-	int padding;
 } Sector;
 
 typedef struct {
@@ -46,7 +44,7 @@ static void init_sectors( Sector sectors[], int n_sec, Real ry, Real eye_x )
 		Sector *sec = sectors + s;
 
 		sec->a = sec->b = 0;
-		sec->alive = 1;
+		//sec->alive = 1;
 
 		Real t = ( 2.0f*(s+1) - n_sec + 1 ) / n_sec;
 
@@ -75,9 +73,6 @@ void scan_sectors_1( int n_sec,
 		for( s=0; s<n_sec; s++ ) {
 			Sector *sec = sectors + s;
 
-			if ( !sec->alive )
-				continue;
-
 			const Real prev_a = sec->a;
 			const Real prev_b = sec->b;
 
@@ -88,13 +83,8 @@ void scan_sectors_1( int n_sec,
 			x0 = MAX( x0, 0 );
 			x1 = MIN( x1, TERRAIN_W-1 );
 
-			int any_in_range = 0;
 			int x;
 			Real limit = ry * prev_b;
-
-			// if a sector is so thin it doesn't contain even a single cell
-			// then this workaround is needed to prevent too early sector termination
-			any_in_range |= x1 <= x0;
 
 			for( x=x0; x<=x1; x++ ) {
 				const int cell_index =
@@ -108,21 +98,18 @@ void scan_sectors_1( int n_sec,
 				rx = x - world.eye[0];
 				rz = z - world.eye[2];
 
-				int in_range = ( rx*rx + ry2 < world.max_dist_sq );
-				any_in_range |= in_range;
-
 				if ( limit <= prev_a*rz ) {
 					if ( rz < min_rz ) {
 						min_rz = rz;
 						sec->a = ry;
 						sec->b = rz;
 					}
+					int in_range = ( rx*rx + ry2 < world.max_dist_sq );
 					if ( in_range )
 						world.fog[cell_index] = 0;
 				}
 			}
 
-			sec->alive = any_in_range;
 			sec->x0 += sec->dx0dy;
 			sec->x1 += sec->dx1dy;
 		}
@@ -241,7 +228,7 @@ void calc_fog3( Light li[1] )
 		.max_dist = r,
 	};
 
-	const int n_sectors = 300;
+	const int n_sectors = 128;
 	int32_t cell[3];
 	float cell_off[2];
 	int i;
@@ -283,7 +270,7 @@ void calc_fog3( Light li[1] )
 
 	if ( q & 2 )
 	scan_sectors( n_sectors,
-		cell[1]+1, -1, y0,
+		cell[1], -1, y0,
 		cell_off[1],
 		world_xy );
 	
@@ -295,7 +282,7 @@ void calc_fog3( Light li[1] )
 
 	if ( q & 8 )
 	scan_sectors( n_sectors,
-		cell[0]+1, -1, x0,
+		cell[0], -1, x0,
 		cell_off[0],
 		world_yx );
 }
