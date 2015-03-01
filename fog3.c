@@ -134,7 +134,7 @@ void calc_fog3( Light li[1] )
 	};
 
 	const int n_sectors = 128;
-	int32_t cell[3];
+	int cell[3];
 	float cell_off[2];
 	int i;
 

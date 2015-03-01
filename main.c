@@ -119,7 +119,7 @@ int main( int argc, char **argv )
 		render_map();
 		show_light_pos( &light );
 		SDL_GL_SwapBuffers();
-		SDL_Delay( 10 );
+		SDL_Delay( 20 );
 	}
 
 	SDL_Quit();
