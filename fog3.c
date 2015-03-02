@@ -100,11 +100,10 @@ void scan_sectors( int n_sec,
 			}
 
 			for( x=x0; x<=x1; x++ ) {
-				Real rx, rz, z;
+				Real rz, z;
 				z = row_data_z[x];
 
 				/* {rx,ry,rz} is the vector from light to terrain vertex */
-				rx = x - world.eye[0];
 				rz = z - world.eye[2];
 
 				if ( limit <= prev_a*rz ) {
