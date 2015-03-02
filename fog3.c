@@ -13,6 +13,8 @@ typedef float Real;
 typedef float DReal;
 #endif
 
+#define MAX_SECTORS 512
+
 typedef struct {
 	// right edge of the scanline
 	// (left edge is always the right edge of the previous sector)
@@ -25,7 +27,7 @@ typedef struct {
 typedef struct {
 	unsigned char *z;
 	unsigned char *fog;
-	int shl_row, shl_col;
+	int pitch; /* how many bytes to skip to get from row N to row (N+1) */
 	int max_col;
 	/* cell index is computed as follows:
 		i = ( row << shl_row ) + ( col << shl_col )
@@ -40,71 +42,91 @@ static void init_sectors( Sector sectors[], int n_sec, Real ry, Real eye_x )
 	/* initialize sectors */
 	for( int s=0; s<n_sec; s++ ) {
 		Sector *sec = sectors + s;
-		sec->a = sec->b = 0;
+		sec->a = 0;
+		sec->b = -10000000;
 		Real t = ( 2.0f*(s+1) - n_sec + 1 ) / n_sec;
 		sec->dx1dy = t;
 		sec->x1 = eye_x + ry * t;
 	}
 
-	//__asm__ volatile ( "nop; nop; addl $0, %eax; nop; nop; nop;" );
+	__asm__ volatile ( "nop; nop; addl $0, %eax; nop; nop; nop;" );
 }
 
-void scan_sectors_1( int n_sec,
+void scan_sectors( int n_sec,
 	int row, int row_step, int row_end, Real ry,
 	FogWorld world )
 {
-	Sector sectors[n_sec];
+	Sector sectors[MAX_SECTORS];
+	char dead_sectors[MAX_SECTORS] = {0};
+
 	init_sectors( sectors, n_sec, ry, world.eye[0] );
 
-	while( row != row_end ) {
+	int pitch = world.pitch;
+	unsigned char *row_data_z = world.z + row * pitch;
+	unsigned char *row_data_f = world.fog + row * pitch;
+	pitch *= row_step;
+
+	do {
 		Real ry2 = ry * ry;
 		Real prev_x0 = world.eye[0] - ry;
-		int s;
-		for( s=0; s<n_sec; s++ ) {
+
+		for( int s=0; s<n_sec; s++ ) {
+			if ( dead_sectors[s] )
+				continue;
+
 			Sector *sec = sectors + s;
-
-			const Real prev_a = sec->a;
-			const Real prev_b = sec->b;
-
-			Real min_rz = 1000000;
+			Real prev_a = sec->a;
+			Real prev_b = sec->b;
 
 			int x0 = prev_x0;
 			int x1 = (int) sec->x1; // + 1;
 			prev_x0 = x1;
-			x0 = MAX( x0, 0 );
-			x1 = MIN( x1, TERRAIN_W-1 );
 
-			int x;
+			x0 = MAX( x0, 0 );
+			x1 = MIN( x1, world.max_col );
+
 			Real limit = ry * prev_b;
 
-			for( x=x0; x<=x1; x++ ) {
-				const int cell_index =
-					( row << world.shl_row )
-					+ ( x << world.shl_col );
+			Real next_rz0 = -10000000;
+			Real next_rz = next_rz0;
+			int x;
 
+			Real tx;
+			tx = 1 + ( x0 + x1 >> 1 );
+			tx = tx - world.eye[0];
+			if ( tx*tx + ry2 > world.max_dist_sq ) {
+				dead_sectors[s] = 1;
+				continue;
+			}
+
+			for( x=x0; x<=x1; x++ ) {
 				Real rx, rz, z;
-				z = world.z[cell_index];
+				z = row_data_z[x];
 
 				/* {rx,ry,rz} is the vector from light to terrain vertex */
 				rx = x - world.eye[0];
 				rz = z - world.eye[2];
 
 				if ( limit <= prev_a*rz ) {
-					if ( rz < min_rz ) {
-						min_rz = rz;
-						sec->a = ry;
-						sec->b = rz;
-					}
-					int in_range = ( rx*rx + ry2 < world.max_dist_sq );
-					if ( in_range )
-						world.fog[cell_index] = 0;
+					row_data_f[x] = 0;
+					if ( rz > next_rz )
+						next_rz = rz;
 				}
 			}
+
+			if ( next_rz != next_rz0 ) {
+				sec->a = ry;
+				sec->b = next_rz;
+			}
+
 			sec->x1 += sec->dx1dy;
 		}
+
+		row_data_z += pitch;
+		row_data_f += pitch;
 		row += row_step;
 		ry += 1;
-	}
+	} while( row != row_end );
 }
 
 void calc_fog3( Light li[1] )
@@ -115,28 +137,28 @@ void calc_fog3( Light li[1] )
 	FogWorld world_xy =  {
 		.z = terrain_z[0],
 		.fog = fog_layer[0],
-		.shl_row = 7,
-		.shl_col = 0,
+		.pitch = TERRAIN_W,
 		.max_col = TERRAIN_W-1,
 		.eye = {li->pos[0], li->pos[1], li->pos[2]},
 		.max_dist_sq = rr,
 		.max_dist = r,
 	};
 	FogWorld world_yx =  {
-		.z = terrain_z[0],
-		.fog = fog_layer[0],
-		.shl_row = 0,
-		.shl_col = 7,
+		.z = terrain_z_transposed[0],
+		.fog = fog_layer_transposed[0],
+		.pitch = TERRAIN_H,
 		.max_col = TERRAIN_H-1,
 		.eye = {li->pos[1], li->pos[0], li->pos[2]},
 		.max_dist_sq = rr,
 		.max_dist = r,
 	};
 
-	const int n_sectors = 128;
+	int n_sectors = 256;
 	int cell[3];
 	float cell_off[2];
 	int i;
+
+	n_sectors = MIN( n_sectors, MAX_SECTORS );
 
 	for( i=0; i<2; i++ ) {
 		cell[i] = li->pos[i];
@@ -162,10 +184,6 @@ void calc_fog3( Light li[1] )
 	assert( x0 <= x1 );
 
 	int q = 0xF;
-
-	#if 1
-	#define scan_sectors scan_sectors_1
-	#endif
 
 	if ( q & 1 )
 	scan_sectors( n_sectors,

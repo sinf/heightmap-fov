@@ -1,6 +1,6 @@
 
 TARGET?=a.out
-CFLAGS=-std=c99 -Wall -Wno-missing-braces $(shell sdl-config --cflags) $(shell pkg-config --cflags gl glew) $(XFLAGS)
+CFLAGS=-std=c99 -Wall -Wextra -pedantic -Wno-missing-braces -Wno-parentheses $(shell sdl-config --cflags) $(shell pkg-config --cflags gl glew) $(XFLAGS)
 LIBS=-lm -lfreeimage $(shell sdl-config --libs) $(shell pkg-config --libs gl glew)
 SRC=$(wildcard *.c)
 DEBUG=fog.debug

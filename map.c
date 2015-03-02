@@ -4,6 +4,9 @@
 unsigned char terrain_z[MAP_H][MAP_W] = {{0}};
 unsigned char fog_layer[MAP_H][MAP_W] = {{0}};
 
+unsigned char terrain_z_transposed[MAP_W][MAP_H] = {{0}};
+unsigned char fog_layer_transposed[MAP_W][MAP_W] = {{0}};
+
 int load_map( const char *filename )
 {
 	FIBITMAP *fib, *grey;
@@ -41,6 +44,12 @@ int load_map( const char *filename )
 		unsigned char *line = FreeImage_GetScanLine( grey, y );
 		for( x=0; x<w; x++ ) {
 			terrain_z[y][x] = line[x];
+		}
+	}
+
+	for( x=0; x<w; x++ ) {
+		for( y=0; y<h; y++ ) {
+			terrain_z_transposed[x][y] = terrain_z[y][x];
 		}
 	}
 

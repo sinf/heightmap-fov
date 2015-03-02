@@ -28,7 +28,14 @@ static void noise_reduction_pass( void )
 void calc_fog( Light *li )
 {
 	memset( fog_layer, 1, sizeof( fog_layer ) );
+	memset( fog_layer_transposed, 1, sizeof( fog_layer ) );
 	the_fog_function( li );
+
+	for( int y=0; y<MAP_H; y++ ) {
+		for( int x=0; x<MAP_W; x++ ) {
+			fog_layer[y][x] &= fog_layer_transposed[x][y];
+		}
+	}
 
 	if ( 0 )
 		noise_reduction_pass();

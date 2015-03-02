@@ -9,7 +9,7 @@ typedef struct {
 	float cell_off[2];
 } RayConfig;
 
-static void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_max )
+void raycast( const RayConfig rc[1], float org[3], float dir[2], float ray_len_max )
 {
 	const int *cell_end = rc->cell_end;
 	const int *cell_inc = rc->cell_inc;

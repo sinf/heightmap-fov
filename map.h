@@ -17,7 +17,10 @@
 #define CLAMP(x,low,high) MAX(low,MIN(x,high))
 
 extern unsigned char terrain_z[MAP_H][MAP_W];
+extern unsigned char terrain_z_transposed[MAP_W][MAP_H];
+
 extern unsigned char fog_layer[MAP_H][MAP_W];
+extern unsigned char fog_layer_transposed[MAP_W][MAP_W];
 
 int load_map( const char *filename );
 
