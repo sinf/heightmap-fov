@@ -53,7 +53,7 @@ static int process_events( void )
 						light.radius = light.radius < 100
 							? 400 : LIGHT_R;
 						break;
-					case SDLK_m:
+					case SDLK_r:
 						light.radius = radii[rm];
 						rm = ( rm + 1 ) % 5;
 						break;

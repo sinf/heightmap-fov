@@ -41,3 +41,11 @@ void calc_fog( Light *li )
 		noise_reduction_pass();
 }
 
+void draw_fog_debug( void )
+{
+	if ( the_fog_function == calc_fog4 ) {
+		extern void draw_fog_debug4( void );
+		draw_fog_debug4();
+	}
+}
+

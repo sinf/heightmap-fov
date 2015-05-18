@@ -15,6 +15,7 @@ void calc_fog3( Light *li );
 void calc_fog4( Light *li );
 
 void calc_fog( Light *li );
+void draw_fog_debug( void );
 
 #endif
 

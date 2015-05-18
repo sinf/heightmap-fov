@@ -1,120 +1,121 @@
 #include <stdlib.h>
 #include <stdint.h>
+#include <assert.h>
+#include <math.h>
 #include "map.h"
 #include "fog.h"
 
-typedef struct {
-	unsigned char *z;
-	unsigned char *f;
+/*
+cur_occl = init occlusion shape to not occlude anything
+next_occl = uninitialized
+for each row (from light origin to max.distance):
+	for each column:
+		tile = map[row][column]
+		if tile is not occluded:
+			next_occl.add_occluder(tile)
+			clear fog at tile
+	swap cur_occl and next_occl
+
+occlusion data:
+ - is a vector representation of what can be seen
+ - needs a function that gives an occlusion plane for each (x,y) position
+ - occlusion data = a set of planes & their start/end coordinates
+*/
+
+typedef struct FogMap {
+	unsigned char *f, *z;
 	int pitch;
-	int min_x, max_x;
-	float eye_x;
-	float eye_y;
-	float eye_z;
-} FogWorld;
+} FogMap;
 
-#define MAX_R 512
-
-static void cast_vision( FogWorld world, int row_end )
+static int map_addr( FogMap *m, int x, int y )
 {
-	unsigned char *z_map = world.z;
-	unsigned char *f_map = world.f;
-	int row;
-	int x0, x1;
+	return y * m->pitch + x;
+}
 
-	x0 = x1 = world.eye_x;
-	z_map += world.pitch * (int) world.eye_y;
-	f_map += world.pitch * (int) world.eye_y;
+#define MAX_SHADOWS 1024
+typedef struct {
+	int n;
+	float x[MAX_SHADOWS][2]; // start,end x
+	float y[MAX_SHADOWS];
+	float z[MAX_SHADOWS];
+} Vision;
 
-	// yz vector to occluder
-	float
-		occ_yz[2][MAX_R][2],
-		(*cur_occ)[2] = &occ_yz[0][0],
-		(*prev_occ)[2] = &occ_yz[1][0];
+static void clear( Vision *v )
+{
+	v->n = 0;
+}
+static void swap( Vision **old, Vision **new )
+{
+	Vision *temp = *old;
+	*old = *new;
+	*new = temp;
+	clear( temp );
+}
 
-	for( int i=0; i<MAX_R; i++ ) {
-		prev_occ[i][0] = 1;
-		prev_occ[i][1] = -1000000;
-	}
+static float cross_z( float ax, float ay, float bx, float by )
+{
+	return ax*by - bx*ay;
+}
 
-	row_end = MIN( row_end, MAX_R-1 );
+static void travel_sector( Light *li, FogMap *map )
+{
+	int y0 = li->pos[1] + 1;
+	int y1 = li->pos[1] + li->radius;
+	int y;
+	Vision all_vis[2];
+	Vision *old_vis = all_vis;
+	Vision *new_vis = all_vis+1;
 
-	for( row=0; row<row_end; row++ )
-	{
+	y0 = MAX( y0, 0 );
+	y1 = MIN( y1, MAP_H-1 );
+
+	clear( old_vis );
+	clear( new_vis );
+
+	for( y=y0; y<=y1; y++ ) {
+
+		int r = y - li->pos[1];
+		int x0 = li->pos[0] - r;
+		int x1 = li->pos[0] + r;
 		int x;
-		int src_x = 0;
-		int row_len = x1 - x0 + 1;
+		int s = 0;
 
-		for( x=0; x<row_len; x++ ) {
-			int world_x = x0 + x;
-			float z = z_map[world_x] - world.eye_z;
+		x0 = MAX( x0, 0 );
+		x1 = MIN( x1, MAP_W-1 );
 
-			src_x = x * ( row_len - 2 ) / (float) row_len + 0.5f;
-			if ( src_x < 0 || src_x > row_len )
-				continue;
+		for( x=x0; x<=x1; x++ ) {
+			int z = map->z[map_addr(map,x,y)];
 
-			/* (current y, current z) x (occluder y, occluder z) */
-			if ( row*prev_occ[src_x][1] - prev_occ[src_x][0]*z < 0 ) {
-				f_map[world_x] = 0;
-				cur_occ[x][0] = row;
-				cur_occ[x][1] = z;
-			} else {
-				cur_occ[x][0] = prev_occ[src_x][0];
-				cur_occ[x][1] = prev_occ[src_x][1];
+			float p[3] =  {
+				x + 0.5f - li->pos[0],
+				y + 0.5f - li->pos[1],
+				z - li->pos[2]
+			};
+
+			if ( s < old_vis->n ) {
+				s += cross_z(
+					old_vis->x[s][1], old_vis->y[s],
+					p[0], p[1] ) > 0;
 			}
 
-			/*
-			row_len / ( row_len + 2 ) = src_x / x
-			src_x = x * row_len / ( row_len + 2 )
-			*/
-			#if 0
-			tx += dtx;
-			if ( tx >= 1.0f ) {
-				tx = 0;
-				src_x += 1;
+			if ( s == old_vis->n || cross_z(
+			old_vis->y[s], old_vis->z[s], p[1], p[2] ) > 0 ) {
+				map->f[map_addr(map,x,y)] = 0;
 			}
-
-			if ( src_x >= row_len )
-				break;
-			#endif
 		}
 
-		x0 -= 1;
-		x1 += 1;
-		x0 = MAX( x0, world.min_x );
-		x1 = MIN( x1, world.max_x );
-		z_map += world.pitch;
-		f_map += world.pitch;
-
-		void *temp_occ = cur_occ;
-		cur_occ = prev_occ;
-		prev_occ = temp_occ;
+		swap( &old_vis, &new_vis );
 	}
 }
 
 void calc_fog4( Light *li )
 {
-	FogWorld fw = {
-		.z = terrain_z[0],
-		.f = fog_layer[0],
-		.pitch = TERRAIN_W,
-		.min_x = 0,
-		.max_x = TERRAIN_W-1,
-		.eye_x = li->pos[0],
-		.eye_y = li->pos[1],
-		.eye_z = li->pos[2],
-	};
+	FogMap m = {.f=fog_layer[0], .z=terrain_z[0], .pitch=MAP_W};
+	travel_sector( li, &m );
+}
 
-	int y0 = li->pos[1];
-	int y1 = li->pos[1] + li->radius;
-	y1 = MIN( TERRAIN_H-1, y1 );
-
-	int cell_x = li->pos[0];
-	int cell_y = li->pos[1];
-
-	if ( !in_map_bounds( cell_x, cell_y ) )
-		return;
-
-	cast_vision( fw, y1 - y0 + 1 ); //, li->pos[0] - cell_x );
+#include <GL/gl.h>
+void draw_fog_debug4( void )
+{
 }
 

@@ -37,6 +37,8 @@ void render_map( void )
 	glEnable( GL_BLEND );
 	glWindowPos2i( 0, WIN_H-1 );
 	glDrawPixels( MAP_W, MAP_H, GL_RGBA, GL_UNSIGNED_BYTE, fog );
+
+	//draw_fog_debug();
 }
 
 void show_light_pos( struct Light *li )

@@ -13,7 +13,7 @@ typedef float Real;
 typedef float DReal;
 #endif
 
-#define MAX_SECTORS 512
+#define MAX_SECTORS 256
 
 typedef struct {
 	// right edge of the scanline
@@ -43,13 +43,14 @@ static void init_sectors( Sector sectors[], int n_sec, Real ry, Real eye_x )
 	for( int s=0; s<n_sec; s++ ) {
 		Sector *sec = sectors + s;
 		sec->a = 0;
-		sec->b = -10000000;
+		sec->b = 0;
 		Real t = ( 2.0f*(s+1) - n_sec + 1 ) / n_sec;
 		sec->dx1dy = t;
 		sec->x1 = eye_x + ry * t;
 	}
-
+	#if 0
 	__asm__ volatile ( "nop; nop; addl $0, %eax; nop; nop; nop;" );
+	#endif
 }
 
 void scan_sectors( int n_sec,
@@ -59,6 +60,8 @@ void scan_sectors( int n_sec,
 	Sector sectors[MAX_SECTORS];
 	char dead_sectors[MAX_SECTORS] = {0};
 
+	row += row_step;
+	ry += 1;
 	init_sectors( sectors, n_sec, ry, world.eye[0] );
 
 	int pitch = world.pitch;
@@ -79,8 +82,8 @@ void scan_sectors( int n_sec,
 			Real prev_b = sec->b;
 
 			int x0 = prev_x0;
-			int x1 = (int) sec->x1; // + 1;
-			prev_x0 = x1;
+			int x1 = (int) sec->x1;
+			prev_x0 = sec->x1;
 
 			x0 = MAX( x0, 0 );
 			x1 = MIN( x1, world.max_col );
@@ -164,7 +167,9 @@ void calc_fog3( Light li[1] )
 		cell_off[i] = li->pos[i] - cell[i];
 	}
 
-	if ( !in_map_bounds( cell[0], cell[1] ) )
+	if ( !in_map_bounds( cell[0]+1, cell[1]+1 ) )
+		return;
+	if ( !in_map_bounds( cell[0]-1, cell[1]-1 ) )
 		return;
 
 	cell[2] = li->pos[2];
