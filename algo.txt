@@ -1,0 +1,25 @@
+
+** Field of vision algorithm **
+
+shadow:
+- float right_edge[3]
+- float nor[3]
+
+shadow list:
+- int n
+- shadow[n]
+
+old_shadows = empty list
+for each row:
+	new_shadows=[]
+	s = old_shadows[0]
+	for c in 0 .. num columns:
+		s1 = collect the 4 shadows at each edge of current tile. project them all onto a ZX plane at y=(current row)
+		if clockwise( s, (tile at c).midpoint.xy )
+			s = s.next
+		if (tile at c).midpoint.xyz is above s.plane:
+			clear fog
+		a = index of the 1st shadow in old_shadows that overlaps s1
+		b = index of the last shadow in old_shadows that overlaps s1
+		new_shadows += sort_and_merge_shadows( old_shadows[a..b], s1 )
+
