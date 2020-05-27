@@ -1,5 +1,5 @@
-#include <glew.h>
-#include <gl.h>
+#include <GL/glew.h>
+#include <GL/gl.h>
 #include "render.h"
 #include "map.h"
 #include "fog.h"

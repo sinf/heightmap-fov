@@ -114,7 +114,7 @@ void calc_fog4( Light *li )
 	travel_sector( li, &m );
 }
 
-#include <GL/gl.h>
+//#include <GL/gl.h>
 void draw_fog_debug4( void )
 {
 }
