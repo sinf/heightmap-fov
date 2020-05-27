@@ -1,0 +1,6 @@
+.sconsign.dblite
+fog
+fog.debug
+fog.small
+*.c.1
+*.c1
